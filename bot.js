@@ -15,12 +15,11 @@ const PORT = process.env.PORT || 10000;
 app.get('/', (req, res) => res.send('WhatsApp bot is running'));
 app.listen(PORT, () => console.log('Health server on port ' + PORT));
 
-// WhatsApp client
+// WhatsApp client - let puppeteer find Chrome automatically
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: '/tmp/wwebjs_auth' }),
   puppeteer: {
     headless: true,
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
