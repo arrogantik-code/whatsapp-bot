@@ -2,6 +2,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const Groq = require('groq-sdk');
 const express = require('express');
+const puppeteer = require('puppeteer-core');
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 
@@ -15,8 +16,18 @@ const PORT = process.env.PORT || 10000;
 app.get('/', (req, res) => res.send('WhatsApp bot is running'));
 app.listen(PORT, () => console.log('Health server on port ' + PORT));
 
-// WhatsApp client - let puppeteer find Chrome automatically
-const client = new Client({
+// Find Chrome executable
+const { execSync } = require('child_process');
+let chromePath = '';
+try {
+  chromePath = execSync('which google-chrome || which chromium-browser || which chromium || find /opt/render/.cache/puppeteer -name "chrome" -type f 2>/dev/null | head -1').toString().trim();
+  console.log('Chrome found at:', chromePath);
+} catch(e) {
+  console.log('Chrome search failed, using default');
+}
+
+// WhatsApp client
+const clientConfig = {
   authStrategy: new LocalAuth({ dataPath: '/tmp/wwebjs_auth' }),
   puppeteer: {
     headless: true,
@@ -31,7 +42,14 @@ const client = new Client({
       '--disable-gpu'
     ]
   }
-});
+};
+
+if (chromePath) {
+  clientConfig.puppeteer.executablePath = chromePath;
+}
+
+const { Client: WAClient, LocalAuth: WALocalAuth } = require('whatsapp-web.js');
+const client = new WAClient(clientConfig);
 
 client.on('qr', (qr) => {
   console.log('\n=== SCAN QR CODE WITH WHATSAPP BUSINESS ===');
