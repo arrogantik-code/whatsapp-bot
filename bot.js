@@ -4,13 +4,30 @@ const Groq = require('groq-sdk');
 const express = require('express');
 const pino = require('pino');
 const qrcode = require('qrcode-terminal');
-const path = require('path');
+const QRCode = require('qrcode');
 const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-app.get('/', (req, res) => res.send('WhatsApp bot is running!'));
+let currentQR = null;
+let botStatus = 'waiting_qr';
+
+app.get('/', async (req, res) => {
+  if (botStatus === 'connected') {
+    return res.send('<html><body style="font-family:sans-serif;text-align:center;padding:50px"><h1>WhatsApp Bot Active</h1><p>Bot is connected and running!</p></body></html>');
+  }
+  if (!currentQR) {
+    return res.send('<html><body style="font-family:sans-serif;text-align:center;padding:50px"><h1>WhatsApp Bot Starting...</h1><p>QR code not ready yet, refresh in a few seconds.</p></body></html>');
+  }
+  try {
+    const qrDataUrl = await QRCode.toDataURL(currentQR, { width: 400, margin: 2 });
+    res.send('<html><body style="font-family:sans-serif;text-align:center;padding:30px;background:#f0f0f0"><h1>WhatsApp Bot QR Code</h1><p>Scan this with WhatsApp Business app on +77087181350:</p><br><img src="' + qrDataUrl + '" style="border:5px solid #25D366;border-radius:10px"><br><p style="color:#666;margin-top:20px">QR code expires in ~60 seconds. Refresh page if expired.</p></body></html>');
+  } catch(e) {
+    res.send('QR Error: ' + e.message);
+  }
+});
+
 app.listen(PORT, () => console.log('Health server on port ' + PORT));
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
@@ -41,12 +58,16 @@ async function connectToWhatsApp() {
     const { connection, lastDisconnect, qr } = update;
     
     if (qr) {
+      currentQR = qr;
+      botStatus = 'waiting_qr';
       console.log('\n=== QR CODE - SCAN WITH WHATSAPP BUSINESS APP ===');
       qrcode.generate(qr, { small: true });
-      console.log('=== END QR CODE ===\n');
+      console.log('=== END QR CODE ===');
+      console.log('Also available at: https://whatsapp-bot-8mhw.onrender.com');
     }
     
     if (connection === 'close') {
+      currentQR = null;
       const shouldReconnect = lastDisconnect?.error instanceof Boom
         ? lastDisconnect.error.output?.statusCode !== DisconnectReason.loggedOut
         : true;
@@ -58,14 +79,15 @@ async function connectToWhatsApp() {
         setTimeout(connectToWhatsApp, 5000);
       } else {
         console.log('Logged out. Clearing auth and reconnecting...');
-        try {
-          fs.rmSync(AUTH_DIR, { recursive: true, force: true });
-        } catch(e) {}
+        botStatus = 'waiting_qr';
+        try { fs.rmSync(AUTH_DIR, { recursive: true, force: true }); } catch(e) {}
         setTimeout(connectToWhatsApp, 5000);
       }
     }
     
     if (connection === 'open') {
+      currentQR = null;
+      botStatus = 'connected';
       console.log('WhatsApp connected! Bot is active.');
     }
   });
@@ -79,11 +101,8 @@ async function connectToWhatsApp() {
       
       const jid = msg.key.remoteJid;
       if (!jid) continue;
-      
-      // Skip group messages
       if (jid.includes('@g.us')) continue;
       
-      // Get text
       const text = msg.message?.conversation 
         || msg.message?.extendedTextMessage?.text 
         || '';
@@ -121,5 +140,5 @@ async function connectToWhatsApp() {
   return sock;
 }
 
-console.log('Starting WhatsApp bot with Baileys (no Chrome needed)...');
+console.log('Starting WhatsApp bot with Baileys...');
 connectToWhatsApp().catch(console.error);
