@@ -15,11 +15,12 @@ const PORT = process.env.PORT || 10000;
 app.get('/', (req, res) => res.send('WhatsApp bot is running'));
 app.listen(PORT, () => console.log('Health server on port ' + PORT));
 
-// WhatsApp client with puppeteer args for Render
+// WhatsApp client
 const client = new Client({
   authStrategy: new LocalAuth({ dataPath: '/tmp/wwebjs_auth' }),
   puppeteer: {
     headless: true,
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -34,36 +35,24 @@ const client = new Client({
 });
 
 client.on('qr', (qr) => {
-  console.log('\n=== SCAN THIS QR CODE WITH WHATSAPP BUSINESS ===');
+  console.log('\n=== SCAN QR CODE WITH WHATSAPP BUSINESS ===');
   qrcode.generate(qr, { small: true });
-  console.log('=== QR CODE ABOVE ===\n');
+  console.log('==============================================\n');
 });
 
-client.on('authenticated', () => {
-  console.log('WhatsApp authenticated!');
-});
-
-client.on('ready', () => {
-  console.log('WhatsApp bot is ready!');
-});
-
-client.on('disconnected', (reason) => {
-  console.log('WhatsApp disconnected:', reason);
-});
+client.on('authenticated', () => console.log('WhatsApp authenticated!'));
+client.on('ready', () => console.log('WhatsApp bot ready!'));
+client.on('disconnected', (reason) => console.log('Disconnected:', reason));
 
 client.on('message', async (msg) => {
-  // Only reply to private messages (not groups)
   if (msg.isGroupMsg) return;
-  // Don't reply to own messages
   if (msg.fromMe) return;
-  // Only text messages
   if (!msg.body || msg.body.trim() === '') return;
 
   console.log('MSG from ' + msg.from + ': ' + msg.body);
 
   try {
     await new Promise(r => setTimeout(r, 2000));
-
     const response = await groq.chat.completions.create({
       model: 'llama-3.3-70b-versatile',
       messages: [
@@ -73,9 +62,8 @@ client.on('message', async (msg) => {
       max_tokens: 500,
       temperature: 0.7
     });
-
     const reply = response.choices[0].message.content;
-    console.log('Replying:', reply.substring(0, 50) + '...');
+    console.log('Replying:', reply.substring(0, 50));
     await msg.reply(reply);
   } catch (err) {
     console.error('Error:', err.message);
